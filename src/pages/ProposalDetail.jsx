@@ -1,29 +1,66 @@
-// Full view for a single proposal with description, results bar, and vote buttons
-// Voting is local-only right now, blockchain write replaces this later
+// Full view for a single proposal with voting buttons
+// Reads proposal data and writes votes to the smart contract
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import dummyProposals from "../dummyData";
+import { useContract, useContractRead, useContractWrite, useAddress } from "@thirdweb-dev/react";
+
+const CONTRACT_ADDRESS = "0x7b15C88a3DE5e5d3F5A756554fb284411Ce620F1";
 
 export default function ProposalDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const address = useAddress();
+  const { contract } = useContract(CONTRACT_ADDRESS);
 
-  // Find the matching proposal from dummy data
-  const proposal = dummyProposals.find((p) => p.id === Number(id));
+  const [proposal, setProposal] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Track whether the user voted (local state only for now)
-  const [voted, setVoted] = useState(false);
-  const [votedFor, setVotedFor] = useState(null);
+  // Check if the connected wallet already voted
+  const { data: voterStatus } = useContractRead(contract, "getVoterStatus", [
+    id,
+    address || "0x0000000000000000000000000000000000000000",
+  ]);
 
-  if (!proposal) {
-    return (
-      <p style={{ textAlign: "center", color: "#f87171", padding: "64px 0" }}>Proposal not found.</p>
-    );
+  const { mutateAsync: castVote, isLoading: voting } = useContractWrite(contract, "vote");
+
+  // Fetch this proposal's data from the contract
+  useEffect(() => {
+    async function fetch() {
+      if (!contract) return;
+      try {
+        const p = await contract.call("getProposal", [id]);
+        setProposal({
+          id: Number(id),
+          title: p.title,
+          description: p.description,
+          creator: p.creator,
+          votesFor: p.votesFor.toNumber(),
+          votesAgainst: p.votesAgainst.toNumber(),
+          createdAt: p.createdAt.toNumber() * 1000,
+        });
+      } catch (err) {
+        console.error("Failed to load proposal:", err);
+      }
+      setLoading(false);
+    }
+    fetch();
+  }, [contract, id]);
+
+  // Send the vote transaction to the contract
+  async function handleVote(support) {
+    if (!address) {
+      alert("Connect your wallet first");
+      return;
+    }
+    try {
+      await castVote({ args: [id, support] });
+      window.location.reload();
+    } catch (err) {
+      console.error("Vote failed:", err);
+      alert("Vote failed. You may have already voted.");
+    }
   }
-
-  const total = proposal.votesFor + proposal.votesAgainst;
-  const forPercent = total > 0 ? Math.round((proposal.votesFor / total) * 100) : 50;
 
   function shortAddr(addr) {
     return addr.slice(0, 6) + "..." + addr.slice(-4);
@@ -37,12 +74,17 @@ export default function ProposalDetail() {
     });
   }
 
-  // Placeholder vote handler
-  function handleVote(support) {
-    setVoted(true);
-    setVotedFor(support);
-    alert("Vote recorded locally. Blockchain transaction goes here later.");
+  if (loading) {
+    return <p style={{ textAlign: "center", color: "#475569", padding: "64px 0" }}>Loading...</p>;
   }
+
+  if (!proposal) {
+    return <p style={{ textAlign: "center", color: "#f87171", padding: "64px 0" }}>Proposal not found.</p>;
+  }
+
+  const total = proposal.votesFor + proposal.votesAgainst;
+  const forPercent = total > 0 ? Math.round((proposal.votesFor / total) * 100) : 50;
+  const alreadyVoted = voterStatus && voterStatus.voted;
 
   // Shared button style
   const btnBase = {
@@ -57,7 +99,6 @@ export default function ProposalDetail() {
 
   return (
     <div style={{ maxWidth: "700px", margin: "0 auto", padding: "32px 24px" }}>
-      {/* Back link */}
       <button
         onClick={() => navigate("/proposals")}
         style={{
@@ -81,7 +122,6 @@ export default function ProposalDetail() {
           padding: "32px",
         }}
       >
-        {/* Header with proposal number and date */}
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
           <span style={{ fontSize: "14px", color: "#6366f1", fontWeight: 600, fontFamily: "monospace" }}>
             Proposal #{proposal.id}
@@ -97,38 +137,17 @@ export default function ProposalDetail() {
           {proposal.description}
         </p>
 
-        <p
-          style={{
-            fontSize: "13px",
-            color: "#475569",
-            fontFamily: "monospace",
-            marginBottom: "28px",
-          }}
-        >
+        <p style={{ fontSize: "13px", color: "#475569", fontFamily: "monospace", marginBottom: "28px" }}>
           Created by {shortAddr(proposal.creator)}
         </p>
 
         {/* Vote results */}
         <div style={{ marginBottom: "28px" }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: "14px",
-              marginBottom: "8px",
-            }}
-          >
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", marginBottom: "8px" }}>
             <span style={{ color: "#818cf8", fontWeight: 600 }}>For: {proposal.votesFor}</span>
             <span style={{ color: "#f87171", fontWeight: 600 }}>Against: {proposal.votesAgainst}</span>
           </div>
-          <div
-            style={{
-              height: "10px",
-              background: "rgba(239, 68, 68, 0.25)",
-              borderRadius: "5px",
-              overflow: "hidden",
-            }}
-          >
+          <div style={{ height: "10px", background: "rgba(239, 68, 68, 0.25)", borderRadius: "5px", overflow: "hidden" }}>
             <div
               style={{
                 height: "100%",
@@ -143,35 +162,31 @@ export default function ProposalDetail() {
           </p>
         </div>
 
-        {/* Vote buttons or confirmation message */}
-        {!voted ? (
+        {/* Vote buttons or status */}
+        {address && !alreadyVoted ? (
           <div style={{ display: "flex", gap: "12px" }}>
             <button
-              style={{
-                ...btnBase,
-                background: "linear-gradient(135deg, #6366f1, #818cf8)",
-                color: "white",
-                border: "none",
-              }}
+              style={{ ...btnBase, background: "linear-gradient(135deg, #6366f1, #818cf8)", color: "white", border: "none" }}
               onClick={() => handleVote(true)}
+              disabled={voting}
             >
-              Vote For
+              {voting ? "Confirming..." : "Vote For"}
             </button>
             <button
-              style={{
-                ...btnBase,
-                background: "transparent",
-                border: "1px solid rgba(248, 113, 113, 0.4)",
-                color: "#f87171",
-              }}
+              style={{ ...btnBase, background: "transparent", border: "1px solid rgba(248, 113, 113, 0.4)", color: "#f87171" }}
               onClick={() => handleVote(false)}
+              disabled={voting}
             >
-              Vote Against
+              {voting ? "Confirming..." : "Vote Against"}
             </button>
           </div>
-        ) : (
+        ) : address && alreadyVoted ? (
           <p style={{ textAlign: "center", color: "#475569", fontStyle: "italic" }}>
-            You voted {votedFor ? "For" : "Against"} this proposal
+            You voted {voterStatus.support ? "For" : "Against"} this proposal
+          </p>
+        ) : (
+          <p style={{ textAlign: "center", color: "#f59e0b", fontSize: "14px" }}>
+            Connect your wallet to vote
           </p>
         )}
       </div>

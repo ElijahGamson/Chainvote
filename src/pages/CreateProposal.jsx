@@ -1,29 +1,39 @@
-// Form for submitting a new proposal
-// Currently just logs to console, blockchain write replaces this later
+// Form for submitting a new proposal to the blockchain
+// Calls the createProposal function on the smart contract
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useContract, useContractWrite, useAddress } from "@thirdweb-dev/react";
+
+const CONTRACT_ADDRESS = "0x7b15C88a3DE5e5d3F5A756554fb284411Ce620F1";
 
 export default function CreateProposal() {
   const navigate = useNavigate();
+  const address = useAddress();
+  const { contract } = useContract(CONTRACT_ADDRESS);
+  const { mutateAsync: create, isLoading } = useContractWrite(contract, "createProposal");
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
-  // Placeholder submit handler
-  function handleSubmit() {
+  // Sends the proposal to the smart contract
+  async function handleSubmit() {
+    if (!address) {
+      alert("Connect your wallet first");
+      return;
+    }
     if (!title.trim() || !description.trim()) {
       alert("Fill in both fields");
       return;
     }
 
-    setSubmitting(true);
-    setTimeout(() => {
-      console.log("Proposal created (locally):", { title, description });
-      alert("Proposal created locally. Blockchain write goes here later.");
-      setSubmitting(false);
+    try {
+      await create({ args: [title, description] });
       navigate("/proposals");
-    }, 800);
+    } catch (err) {
+      console.error("Create failed:", err);
+      alert("Failed to create proposal");
+    }
   }
 
   // Shared input styling
@@ -97,10 +107,16 @@ export default function CreateProposal() {
             fontFamily: "inherit",
           }}
           onClick={handleSubmit}
-          disabled={submitting}
+          disabled={isLoading || !address}
         >
-          {submitting ? "Submitting..." : "Submit Proposal"}
+          {isLoading ? "Submitting to chain..." : "Submit Proposal"}
         </button>
+
+        {!address && (
+          <p style={{ textAlign: "center", color: "#f59e0b", fontSize: "13px", marginTop: "12px" }}>
+            Connect your wallet to create proposals
+          </p>
+        )}
       </div>
     </div>
   );
