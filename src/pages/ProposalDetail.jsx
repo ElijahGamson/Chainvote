@@ -1,28 +1,21 @@
-// Full view for a single proposal with voting buttons
-// Reads proposal data and writes votes to the smart contract
+// Full view for a single proposal
+// Reads real data from the blockchain but voting is not yet wired up
 
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useContract, useContractRead, useContractWrite, useAddress } from "@thirdweb-dev/react";
+import { useContract } from "@thirdweb-dev/react";
 
 const CONTRACT_ADDRESS = "0x7b15C88a3DE5e5d3F5A756554fb284411Ce620F1";
 
 export default function ProposalDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const address = useAddress();
   const { contract } = useContract(CONTRACT_ADDRESS);
 
   const [proposal, setProposal] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // Check if the connected wallet already voted
-  const { data: voterStatus } = useContractRead(contract, "getVoterStatus", [
-    id,
-    address || "0x0000000000000000000000000000000000000000",
-  ]);
-
-  const { mutateAsync: castVote, isLoading: voting } = useContractWrite(contract, "vote");
+  const [voted, setVoted] = useState(false);
+  const [votedFor, setVotedFor] = useState(null);
 
   // Fetch this proposal's data from the contract
   useEffect(() => {
@@ -47,19 +40,11 @@ export default function ProposalDetail() {
     fetch();
   }, [contract, id]);
 
-  // Send the vote transaction to the contract
-  async function handleVote(support) {
-    if (!address) {
-      alert("Connect your wallet first");
-      return;
-    }
-    try {
-      await castVote({ args: [id, support] });
-      window.location.reload();
-    } catch (err) {
-      console.error("Vote failed:", err);
-      alert("Vote failed. You may have already voted.");
-    }
+  // Placeholder vote handler, blockchain write coming next
+  function handleVote(support) {
+    setVoted(true);
+    setVotedFor(support);
+    alert("Vote recorded locally. Blockchain transaction coming soon.");
   }
 
   function shortAddr(addr) {
@@ -84,9 +69,7 @@ export default function ProposalDetail() {
 
   const total = proposal.votesFor + proposal.votesAgainst;
   const forPercent = total > 0 ? Math.round((proposal.votesFor / total) * 100) : 50;
-  const alreadyVoted = voterStatus && voterStatus.voted;
 
-  // Shared button style
   const btnBase = {
     flex: 1,
     padding: "12px",
@@ -141,7 +124,6 @@ export default function ProposalDetail() {
           Created by {shortAddr(proposal.creator)}
         </p>
 
-        {/* Vote results */}
         <div style={{ marginBottom: "28px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", marginBottom: "8px" }}>
             <span style={{ color: "#818cf8", fontWeight: 600 }}>For: {proposal.votesFor}</span>
@@ -162,31 +144,24 @@ export default function ProposalDetail() {
           </p>
         </div>
 
-        {/* Vote buttons or status */}
-        {address && !alreadyVoted ? (
+        {!voted ? (
           <div style={{ display: "flex", gap: "12px" }}>
             <button
               style={{ ...btnBase, background: "linear-gradient(135deg, #6366f1, #818cf8)", color: "white", border: "none" }}
               onClick={() => handleVote(true)}
-              disabled={voting}
             >
-              {voting ? "Confirming..." : "Vote For"}
+              Vote For
             </button>
             <button
               style={{ ...btnBase, background: "transparent", border: "1px solid rgba(248, 113, 113, 0.4)", color: "#f87171" }}
               onClick={() => handleVote(false)}
-              disabled={voting}
             >
-              {voting ? "Confirming..." : "Vote Against"}
+              Vote Against
             </button>
           </div>
-        ) : address && alreadyVoted ? (
-          <p style={{ textAlign: "center", color: "#475569", fontStyle: "italic" }}>
-            You voted {voterStatus.support ? "For" : "Against"} this proposal
-          </p>
         ) : (
-          <p style={{ textAlign: "center", color: "#f59e0b", fontSize: "14px" }}>
-            Connect your wallet to vote
+          <p style={{ textAlign: "center", color: "#475569", fontStyle: "italic" }}>
+            You voted {votedFor ? "For" : "Against"} this proposal
           </p>
         )}
       </div>
