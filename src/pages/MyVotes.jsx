@@ -1,21 +1,73 @@
-// Shows which proposals the connected user has voted on
-// Uses hardcoded data for now, blockchain reads get added later
+// Shows which proposals the connected wallet has voted on
+// Loops through all proposals and checks getVoterStatus for each
 
+import { useState, useEffect } from "react";
+import { useContract, useContractRead, useAddress } from "@thirdweb-dev/react";
 import ProposalCard from "../components/ProposalCard";
-import dummyProposals from "../dummyData";
 
-const myVotes = [
-  { proposalId: 1, support: "For" },
-  { proposalId: 3, support: "Against" },
-];
+const CONTRACT_ADDRESS = "0x7b15C88a3DE5e5d3F5A756554fb284411Ce620F1";
 
 export default function MyVotes() {
-  const votedItems = myVotes
-    .map((v) => ({
-      proposal: dummyProposals.find((p) => p.id === v.proposalId),
-      support: v.support,
-    }))
-    .filter((v) => v.proposal);
+  const address = useAddress();
+  const { contract } = useContract(CONTRACT_ADDRESS);
+  const { data: count } = useContractRead(contract, "getProposalCount");
+
+  const [votedProposals, setVotedProposals] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Check every proposal to see if this wallet voted on it
+  useEffect(() => {
+    async function fetchMyVotes() {
+      if (!contract || !count || !address) {
+        setLoading(false);
+        return;
+      }
+
+      const total = count.toNumber();
+      const results = [];
+
+      for (let i = 1; i <= total; i++) {
+        try {
+          const status = await contract.call("getVoterStatus", [i, address]);
+
+          if (status.voted) {
+            const p = await contract.call("getProposal", [i]);
+            results.push({
+              proposal: {
+                id: i,
+                title: p.title,
+                description: p.description,
+                creator: p.creator,
+                votesFor: p.votesFor.toNumber(),
+                votesAgainst: p.votesAgainst.toNumber(),
+                createdAt: p.createdAt.toNumber() * 1000,
+              },
+              support: status.support ? "For" : "Against",
+            });
+          }
+        } catch (err) {
+          console.error("Error checking vote for proposal", i, err);
+        }
+      }
+
+      setVotedProposals(results);
+      setLoading(false);
+    }
+
+    fetchMyVotes();
+  }, [contract, count, address]);
+
+  if (!address) {
+    return (
+      <div style={{ textAlign: "center", padding: "80px 24px" }}>
+        <p style={{ color: "#475569", fontSize: "16px" }}>Connect your wallet to see your voting history.</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return <p style={{ textAlign: "center", color: "#475569", padding: "64px 0" }}>Loading your votes...</p>;
+  }
 
   return (
     <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "32px 24px" }}>
@@ -23,7 +75,7 @@ export default function MyVotes() {
         My Votes
       </h2>
 
-      {votedItems.length === 0 ? (
+      {votedProposals.length === 0 ? (
         <div
           style={{
             textAlign: "center",
@@ -42,7 +94,7 @@ export default function MyVotes() {
             gap: "20px",
           }}
         >
-          {votedItems.map((v) => (
+          {votedProposals.map((v) => (
             <ProposalCard key={v.proposal.id} proposal={v.proposal} voteLabel={v.support} />
           ))}
         </div>
