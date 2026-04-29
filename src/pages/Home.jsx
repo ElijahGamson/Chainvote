@@ -1,4 +1,4 @@
-// Landing page that introduces ChainVote
+// Landing page that introduces OpenBallot
 // First thing users see, explains what the app does
 
 import { useNavigate } from "react-router-dom";
