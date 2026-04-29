@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useContract, useContractRead } from "@thirdweb-dev/react";
 import ProposalCard from "../components/ProposalCard";
 
-// Your deployed contract address on BNB Testnet
+// Deployed contract address on BNB Testnet
 const CONTRACT_ADDRESS = "0x7b15C88a3DE5e5d3F5A756554fb284411Ce620F1";
 
 export default function Proposals() {
